@@ -17,7 +17,13 @@ A fast, cross-platform command-line tool for searching and listing files with op
 
 ### From Binary Releases
 
-Download the latest release for your platform from the [Releases](https://github.com/MathiasCodes/flist/releases) page.
+Download the latest release for your platform from the [Releases](https://github.com/MathiasCodes/flist/releases) page:
+
+- **Windows**: `flist-windows-x86_64.exe`
+- **Linux**: `flist-linux-x86_64`
+- **macOS**: `flist-macos-x86_64`
+
+Rename the binary to `flist` (or `flist.exe` on Windows) and add it to your PATH for easy access.
 
 ### From Source
 
