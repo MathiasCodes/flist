@@ -17,7 +17,7 @@ A fast, cross-platform command-line tool for searching and listing files with op
 
 ### From Binary Releases
 
-Download the latest release for your platform from the [Releases](https://github.com/matkoch/flist/releases) page.
+Download the latest release for your platform from the [Releases](https://github.com/MathiasCodes/flist/releases) page.
 
 ### From Source
 
@@ -101,7 +101,7 @@ flist "*.dll" -i -s --minv 10.0.0.0 --maxv 10.0.30000.0 -d C:\Windows\System32 -
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.85 or later
 - Cargo (comes with Rust installation)
 
 ### Build Commands
