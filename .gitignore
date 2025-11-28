@@ -1,0 +1,33 @@
+# Rust
+/target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+/publish/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test outputs
+test_output.txt
+
+# .NET project files (original implementation)
+FList.sln
+FList/
+
+# Enhancement plans
+ENHANCEMENT_PLAN.md
