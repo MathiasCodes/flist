@@ -3,6 +3,7 @@
 //! This module defines the command-line interface for FList using the `clap` crate.
 
 use crate::file_version::FileVersion;
+use crate::version_reader::VersionSource;
 use clap::{ArgGroup, Parser, ValueEnum};
 use std::path::PathBuf;
 
@@ -80,6 +81,15 @@ pub struct CliArgs {
     /// Omit files whose file version is higher than VERSION (e.g. 2.0)
     #[arg(long = "max-version", value_name = "VERSION")]
     pub max_version: Option<FileVersion>,
+
+    /// Take the version from SOURCE (shown, filtered and sorted)
+    #[arg(
+        long = "version-source",
+        value_name = "SOURCE",
+        value_enum,
+        default_value_t = VersionSource::File
+    )]
+    pub version_source: VersionSource,
 
     /// Start the search in DIR [default: the current directory]
     #[arg(short = 'd', long = "dir", value_name = "DIR")]
@@ -174,6 +184,32 @@ mod tests {
         let args = CliArgs::parse_from(["flist", "--sort", "path", "*.dll"]);
         assert_eq!(args.sort_key(), Some(SortKey::Path));
         assert_eq!(args.pattern, "*.dll");
+    }
+
+    #[test]
+    fn version_source_defaults_to_file() {
+        let args = CliArgs::parse_from(["flist"]);
+        assert_eq!(args.version_source, VersionSource::File);
+    }
+
+    #[test]
+    fn parse_version_sources() {
+        let cases = [
+            ("file", VersionSource::File),
+            ("product", VersionSource::Product),
+            ("file-fixed", VersionSource::FileFixed),
+            ("product-fixed", VersionSource::ProductFixed),
+        ];
+        for (value, expected) in cases {
+            let args = CliArgs::parse_from(["flist", "--version-source", value]);
+            assert_eq!(args.version_source, expected, "value {value:?}");
+        }
+    }
+
+    #[test]
+    fn invalid_version_source_is_usage_error() {
+        let err = CliArgs::try_parse_from(["flist", "--version-source", "assembly"]).unwrap_err();
+        assert_eq!(err.exit_code(), 2);
     }
 
     #[test]

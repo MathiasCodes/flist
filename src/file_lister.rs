@@ -1,7 +1,7 @@
 //! File enumeration, pattern matching, filtering and sorting.
 
 use crate::file_version::FileVersion;
-use crate::version_reader::read_file_version;
+use crate::version_reader::{VersionSource, read_version};
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -135,15 +135,18 @@ fn walk_error_message(err: &walkdir::Error) -> String {
     }
 }
 
-/// Creates file information, reading the file version if `read_version` is `true`.
+/// Creates file information, reading the version from `version_source` if one is given.
 ///
 /// Files whose version cannot be read because they are inaccessible are skipped and
 /// reported as warnings.
-pub fn collect_file_info(files: Vec<PathBuf>, read_version: bool) -> SearchResult<FileInfo> {
+pub fn collect_file_info(
+    files: Vec<PathBuf>,
+    version_source: Option<VersionSource>,
+) -> SearchResult<FileInfo> {
     let mut result = SearchResult::default();
     for path in files {
-        let version = if read_version {
-            match read_file_version(&path) {
+        let version = match version_source {
+            Some(source) => match read_version(&path, source) {
                 Ok(version) => version,
                 Err(err) => {
                     result
@@ -151,9 +154,8 @@ pub fn collect_file_info(files: Vec<PathBuf>, read_version: bool) -> SearchResul
                         .push(format!("skipped '{}': {}", path.display(), err));
                     continue;
                 }
-            }
-        } else {
-            None
+            },
+            None => None,
         };
         result.items.push(FileInfo { path, version });
     }
@@ -322,14 +324,17 @@ mod tests {
 
     #[test]
     fn collect_file_info_without_version() {
-        let result = collect_file_info(vec![PathBuf::from("does-not-matter.txt")], false);
+        let result = collect_file_info(vec![PathBuf::from("does-not-matter.txt")], None);
         assert_eq!(result.items, vec![file("does-not-matter.txt", None)]);
         assert!(result.warnings.is_empty());
     }
 
     #[test]
     fn collect_file_info_warns_about_unreadable_file() {
-        let result = collect_file_info(vec![PathBuf::from("flist-missing-file.dll")], true);
+        let result = collect_file_info(
+            vec![PathBuf::from("flist-missing-file.dll")],
+            Some(VersionSource::File),
+        );
         assert!(result.items.is_empty());
         assert_eq!(result.warnings.len(), 1);
     }

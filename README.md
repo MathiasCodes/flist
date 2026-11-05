@@ -104,6 +104,7 @@ flist "*.dll" -f -s --min-version 10.0 --max-version 10.0.30000.0 -d C:\Windows\
 | `--reverse` | `-r` | Reverse the sort order (requires a sort option) |
 | `--min-version <VERSION>` | | Omit files whose version is lower than `<VERSION>` |
 | `--max-version <VERSION>` | | Omit files whose version is higher than `<VERSION>` |
+| `--version-source <SOURCE>` | | Version to use: `file` (default), `product`, `file-fixed` or `product-fixed` |
 | `--dir <DIR>` | `-d` | Directory to search (default: current directory) |
 | `--output <FILE>` | `-o` | Additionally write the output to `<FILE>` (created or overwritten) |
 | `--ignore-inaccessible` | | Skip inaccessible directories and files silently |
@@ -119,7 +120,7 @@ Files without a comparable version are omitted while a version filter is active.
 
 ## Output
 
-One line per file, terminated by CRLF.
+One line per file, encoded as UTF-8 and terminated by the platform's line ending.
 With `--file-version` the version is left-aligned in a column of 16 characters, followed by the full path:
 
 ```text
@@ -177,21 +178,25 @@ cargo build --release --target x86_64-unknown-linux-gnu
 
 ## Platform Notes
 
-### Windows
-- Full PE file version extraction support using native Windows APIs
-- Optimal performance with direct API access
-- Handles access denied errors gracefully
-
-### Linux/macOS
-- Can read PE file version information from Windows binaries
-- Useful for analyzing Windows executables on non-Windows platforms
-- Uses the same pelite library for cross-platform PE parsing
+- Versions are read from Windows executables and libraries (PE files) by parsing the file format directly, without Windows APIs.
+  The result is the same on every platform, so Windows binaries can be analysed on Linux and macOS as well.
+- Native Linux (ELF) and macOS (Mach-O) binaries have no version resource and are listed without a version.
+- Lines end with CRLF on Windows and LF on Linux and macOS.
 
 ## Version Format
 
-The file version is the `FileVersion` string from the version resource, shown exactly as stored in the file (e.g. `14.08` or `10.0.26100.1 (WinBuild.160101.0800)`).
+`--version-source` selects which value of the version resource is used for display, filtering and sorting:
 
-For filtering, the version is interpreted as `major.minor.build.private`.
+| Source | Value | Example |
+|--------|-------|---------|
+| `file` (default) | `FileVersion` string, as shown by Windows Explorer | `10.0.26100.1 (WinBuild.160101.0800)` |
+| `product` | `ProductVersion` string, often the release version of .NET builds | `0.9.4+f67c0dc8fad0` |
+| `file-fixed` | Numeric file version | `10.0.26100.7019` |
+| `product-fixed` | Numeric product version | `0.9.4.0` |
+
+Strings are shown exactly as stored; numeric versions always have four parts.
+
+For filtering and sorting, the version is interpreted as `major.minor.build.private`.
 Each part uses its leading digits; the rest is ignored (`1.0.0-beta` compares as `1.0.0.0`).
 
 ## License

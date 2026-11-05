@@ -6,8 +6,8 @@ use std::io::{self, Write};
 /// Width of the version column, including the separating spaces.
 const VERSION_COLUMN_WIDTH: usize = 16;
 
-/// Line terminator of every output line.
-const LINE_ENDING: &str = "\r\n";
+/// Line terminator of every output line: CRLF on Windows, LF elsewhere.
+const LINE_ENDING: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
 /// Formats one output line without the line terminator.
 ///
@@ -38,7 +38,7 @@ pub fn format_line(file: &FileInfo, include_version: bool) -> String {
     }
 }
 
-/// Writes all files as CRLF-terminated lines to `writer`.
+/// Writes all files as lines with the platform's line ending to `writer`.
 pub fn write_lines(
     writer: &mut impl Write,
     files: &[FileInfo],
@@ -99,9 +99,14 @@ mod tests {
     }
 
     #[test]
-    fn write_lines_uses_crlf() {
+    fn write_lines_uses_platform_line_ending() {
         let mut buffer = Vec::new();
         write_lines(&mut buffer, &[file("a", None), file("b", None)], false).unwrap();
-        assert_eq!(String::from_utf8(buffer).unwrap(), "a\r\nb\r\n");
+        let expected = if cfg!(windows) {
+            "a\r\nb\r\n"
+        } else {
+            "a\nb\n"
+        };
+        assert_eq!(String::from_utf8(buffer).unwrap(), expected);
     }
 }

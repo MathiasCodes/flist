@@ -36,9 +36,10 @@ fn run(args: &CliArgs) -> Result<bool, anyhow::Error> {
     let mut warnings = found.warnings;
 
     let sort_key = args.sort_key();
-    let read_version =
+    let needs_version =
         args.file_version || args.has_version_filter() || sort_key == Some(SortKey::Version);
-    let collected = file_lister::collect_file_info(found.items, read_version);
+    let version_source = needs_version.then_some(args.version_source);
+    let collected = file_lister::collect_file_info(found.items, version_source);
     warnings.extend(collected.warnings);
     let mut files = collected.items;
 

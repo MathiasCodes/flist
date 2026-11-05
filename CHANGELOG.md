@@ -12,9 +12,9 @@ Aligned with [SPECIFICATION.md](SPECIFICATION.md).
 ### Changed
 - **Breaking:** GNU-style options `-f/--file-version`, `--sort <KEY>` with `-s`, `--min-version`, `--max-version`, `-d/--dir`; removed `--ifs`, `--sp`, `--minv`, `--maxv`, `--directory` and `-q/--quiet`
 - Output contains only the result lines, without header and footer
-- Lines end with CRLF on all platforms; output is UTF-8
+- Lines end with CRLF on Windows and LF elsewhere; output is UTF-8
 - Without sorting, files of a directory are listed before its subdirectories
-- The file version is the `FileVersion` string as stored in the file instead of the numeric version
+- The version is by default the `FileVersion` string as stored in the file instead of the numeric version
 - The version filter no longer enables the version column
 - Version comparison treats missing parts as `0` and uses the leading digits of each part
 - Search pattern uses Windows wildcards (`*`, `?`) and is case-insensitive
@@ -23,6 +23,7 @@ Aligned with [SPECIFICATION.md](SPECIFICATION.md).
 ### Added
 - Sorting by file version with `--sort version` or `-v`
 - `-r/--reverse` to reverse the sort order
+- `--version-source` to use the product version or the numeric versions instead of the `FileVersion` string
 - Warnings for skipped inaccessible entries and `--ignore-inaccessible`
 - Exit codes: 1 for runtime errors and skipped entries, 2 for usage errors
 
