@@ -2,83 +2,112 @@
 //!
 //! This module defines the command-line interface for FList using the `clap` crate.
 
-use clap::Parser;
+use crate::file_version::FileVersion;
+use clap::{ArgGroup, Parser, ValueEnum};
+use std::path::PathBuf;
+
+/// The key by which the output is sorted.
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortKey {
+    /// Sort by full path, case-insensitively
+    Path,
+    /// Sort by file version; files without a comparable version come last
+    Version,
+}
 
 /// Command-line arguments for FList.
 ///
-/// FList is a tool for listing files in directories with optional file version information
-/// extraction from PE files (Windows executables and DLLs).
-///
 /// # Examples
 ///
-/// ```no_run
+/// ```
 /// use clap::Parser;
 /// use flist::cli::CliArgs;
 ///
-/// let args = CliArgs::parse();
-/// println!("Pattern: {}", args.pattern);
+/// let args = CliArgs::parse_from(["flist", "*.dll", "--file-version"]);
+/// assert_eq!(args.pattern, "*.dll");
+/// assert!(args.file_version);
 /// ```
 #[derive(Parser, Debug)]
 #[command(name = "flist")]
 #[command(version)]
-#[command(about = "List files in directories with optional file version information", long_about = None)]
+#[command(
+    about = "Lists files in a directory and its subdirectories, optionally with their file version"
+)]
+#[command(args_override_self = true)]
+#[command(group(ArgGroup::new("sorting").multiple(true)))]
 pub struct CliArgs {
-    /// Search pattern (e.g., *.dll, *.exe)
+    /// Search pattern for file names (wildcards * and ?, case-insensitive)
     #[arg(default_value = "*")]
     pub pattern: String,
 
-    /// Include file version information
-    #[arg(short = 'i', long = "ifs")]
-    pub include_file_version: bool,
+    /// Include the file version in the output
+    #[arg(short = 'f', long = "file-version")]
+    pub file_version: bool,
 
-    /// Sort output by file path
-    #[arg(short = 's', long = "sp")]
-    pub sort_by_path: bool,
+    /// Sort the output by KEY
+    #[arg(
+        long = "sort",
+        value_name = "KEY",
+        group = "sorting",
+        overrides_with_all = ["sort_path", "sort_version"]
+    )]
+    pub sort: Option<SortKey>,
 
-    /// Minimum version filter (e.g., 1.2.3.4)
-    /// Format: -minv:1.2.3.4 or --minv 1.2.3.4
-    #[arg(long = "minv", value_name = "VERSION")]
-    pub min_version: Option<String>,
+    /// Short form of --sort path
+    #[arg(
+        short = 's',
+        group = "sorting",
+        overrides_with_all = ["sort", "sort_version"]
+    )]
+    pub sort_path: bool,
 
-    /// Maximum version filter (e.g., 2.0.0.0)
-    /// Format: -maxv:2.0.0.0 or --maxv 2.0.0.0
-    #[arg(long = "maxv", value_name = "VERSION")]
-    pub max_version: Option<String>,
+    /// Short form of --sort version
+    #[arg(
+        short = 'v',
+        group = "sorting",
+        overrides_with_all = ["sort", "sort_path"]
+    )]
+    pub sort_version: bool,
 
-    /// Working directory to search
-    /// Format: -d:C:\path or --directory C:\path
-    #[arg(short = 'd', long = "directory", value_name = "PATH")]
-    pub directory: Option<String>,
+    /// Reverse the sort order (requires a sort option)
+    #[arg(short = 'r', long = "reverse", requires = "sorting")]
+    pub reverse: bool,
 
-    /// Output file path (in addition to console output)
-    /// Format: -o:output.txt or --output output.txt
+    /// Omit files whose file version is lower than VERSION (e.g. 1.2.3.4)
+    #[arg(long = "min-version", value_name = "VERSION")]
+    pub min_version: Option<FileVersion>,
+
+    /// Omit files whose file version is higher than VERSION (e.g. 2.0)
+    #[arg(long = "max-version", value_name = "VERSION")]
+    pub max_version: Option<FileVersion>,
+
+    /// Start the search in DIR [default: the current directory]
+    #[arg(short = 'd', long = "dir", value_name = "DIR")]
+    pub dir: Option<PathBuf>,
+
+    /// Additionally write the output to FILE (created or overwritten)
     #[arg(short = 'o', long = "output", value_name = "FILE")]
-    pub output_file: Option<String>,
+    pub output: Option<PathBuf>,
 
-    /// Quiet mode - only show results
-    #[arg(short = 'q', long = "quiet")]
-    pub quiet: bool,
+    /// Skip inaccessible directories and files silently
+    #[arg(long = "ignore-inaccessible")]
+    pub ignore_inaccessible: bool,
 }
 
 impl CliArgs {
-    /// Normalizes the command-line arguments.
-    ///
-    /// Auto-enables `include_file_version` if `min_version` or `max_version` is specified,
-    /// since version filtering requires version information to be extracted.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use flist::cli::CliArgs;
-    /// use clap::Parser;
-    ///
-    /// let mut args = CliArgs::parse_from(&["flist", "--minv", "1.0.0.0"]);
-    /// args.normalize();
-    /// assert!(args.include_file_version);
-    /// ```
-    pub fn normalize(&mut self) {
-        if self.min_version.is_some() || self.max_version.is_some() {
-            self.include_file_version = true;
+    /// Returns `true` if a version filter is active.
+    pub fn has_version_filter(&self) -> bool {
+        self.min_version.is_some() || self.max_version.is_some()
+    }
+
+    /// Returns the effective sort key; the last of `--sort`, `-s` and `-v` wins.
+    pub fn sort_key(&self) -> Option<SortKey> {
+        if self.sort_path {
+            Some(SortKey::Path)
+        } else if self.sort_version {
+            Some(SortKey::Version)
+        } else {
+            self.sort
         }
     }
 }
@@ -88,82 +117,120 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_pattern() {
-        let args = CliArgs::parse_from(&["flist"]);
+    fn parse_without_arguments_uses_defaults() {
+        let args = CliArgs::parse_from(["flist"]);
         assert_eq!(args.pattern, "*");
-        assert!(!args.include_file_version);
-        assert!(!args.sort_by_path);
-        assert!(!args.quiet);
+        assert!(!args.file_version);
+        assert_eq!(args.sort_key(), None);
+        assert!(!args.reverse);
+        assert!(!args.ignore_inaccessible);
+        assert!(!args.has_version_filter());
     }
 
     #[test]
-    fn test_custom_pattern() {
-        let args = CliArgs::parse_from(&["flist", "*.dll"]);
+    fn parse_short_flags() {
+        let args = CliArgs::parse_from(["flist", "-f", "-s", "-d", "dir", "-o", "out.txt"]);
+        assert!(args.file_version);
+        assert_eq!(args.sort_key(), Some(SortKey::Path));
+        assert_eq!(args.dir, Some(PathBuf::from("dir")));
+        assert_eq!(args.output, Some(PathBuf::from("out.txt")));
+    }
+
+    #[test]
+    fn parse_long_options_with_equals_sign() {
+        let args = CliArgs::parse_from([
+            "flist",
+            "*.exe",
+            "--file-version",
+            "--sort=version",
+            "--reverse",
+            "--min-version=1.0",
+            "--max-version",
+            "2.0.0.0",
+            "--dir=C:\\Windows",
+            "--output=results.txt",
+            "--ignore-inaccessible",
+        ]);
+        assert_eq!(args.pattern, "*.exe");
+        assert!(args.file_version);
+        assert_eq!(args.sort_key(), Some(SortKey::Version));
+        assert!(args.reverse);
+        assert_eq!(args.min_version, Some("1.0".parse().unwrap()));
+        assert_eq!(args.max_version, Some("2.0.0.0".parse().unwrap()));
+        assert_eq!(args.dir, Some(PathBuf::from("C:\\Windows")));
+        assert_eq!(args.output, Some(PathBuf::from("results.txt")));
+        assert!(args.ignore_inaccessible);
+    }
+
+    #[test]
+    fn version_filter_does_not_enable_file_version() {
+        let args = CliArgs::parse_from(["flist", "--min-version", "1.0"]);
+        assert!(args.has_version_filter());
+        assert!(!args.file_version);
+    }
+
+    #[test]
+    fn sort_value_may_follow_after_space() {
+        let args = CliArgs::parse_from(["flist", "--sort", "path", "*.dll"]);
+        assert_eq!(args.sort_key(), Some(SortKey::Path));
         assert_eq!(args.pattern, "*.dll");
     }
 
     #[test]
-    fn test_flags() {
-        let args = CliArgs::parse_from(&["flist", "-i", "-s", "-q"]);
-        assert!(args.include_file_version);
-        assert!(args.sort_by_path);
-        assert!(args.quiet);
+    fn last_sort_option_wins() {
+        let cases: [(&[&str], SortKey); 5] = [
+            (&["-s", "-v"], SortKey::Version),
+            (&["-v", "-s"], SortKey::Path),
+            (&["--sort", "path", "-v"], SortKey::Version),
+            (&["-v", "--sort", "path"], SortKey::Path),
+            (&["--sort", "path", "--sort", "version"], SortKey::Version),
+        ];
+        for (options, expected) in cases {
+            let args = CliArgs::parse_from(std::iter::once(&"flist").chain(options));
+            assert_eq!(args.sort_key(), Some(expected), "options {options:?}");
+        }
     }
 
     #[test]
-    fn test_long_flags() {
-        let args = CliArgs::parse_from(&["flist", "--ifs", "--sp", "--quiet"]);
-        assert!(args.include_file_version);
-        assert!(args.sort_by_path);
-        assert!(args.quiet);
+    fn short_flags_can_be_combined() {
+        let args = CliArgs::parse_from(["flist", "-fvr"]);
+        assert!(args.file_version);
+        assert_eq!(args.sort_key(), Some(SortKey::Version));
+        assert!(args.reverse);
     }
 
     #[test]
-    fn test_version_filters() {
-        let args = CliArgs::parse_from(&["flist", "--minv", "1.0.0.0", "--maxv", "2.0.0.0"]);
-        assert_eq!(args.min_version, Some("1.0.0.0".to_string()));
-        assert_eq!(args.max_version, Some("2.0.0.0".to_string()));
+    fn reverse_without_sort_is_usage_error() {
+        let err = CliArgs::try_parse_from(["flist", "-r"]).unwrap_err();
+        assert_eq!(err.exit_code(), 2);
     }
 
     #[test]
-    fn test_directory_and_output() {
-        let args = CliArgs::parse_from(&["flist", "-d", "C:\\test", "-o", "output.txt"]);
-        assert_eq!(args.directory, Some("C:\\test".to_string()));
-        assert_eq!(args.output_file, Some("output.txt".to_string()));
+    fn invalid_or_missing_sort_key_is_usage_error() {
+        for options in [&["--sort", "size"][..], &["--sort"][..]] {
+            let err =
+                CliArgs::try_parse_from(std::iter::once(&"flist").chain(options)).unwrap_err();
+            assert_eq!(err.exit_code(), 2, "options {options:?}");
+        }
     }
 
     #[test]
-    fn test_normalize_auto_enables_version() {
-        let mut args = CliArgs::parse_from(&["flist", "--minv", "1.0.0.0"]);
-        assert!(!args.include_file_version); // Not set initially
-        args.normalize();
-        assert!(args.include_file_version); // Auto-enabled
+    fn unknown_option_is_usage_error() {
+        let err = CliArgs::try_parse_from(["flist", "-x"]).unwrap_err();
+        assert_eq!(err.exit_code(), 2);
     }
 
     #[test]
-    fn test_all_options_combined() {
-        let args = CliArgs::parse_from(&[
-            "flist",
-            "*.exe",
-            "-i",
-            "-s",
-            "-q",
-            "--minv",
-            "1.0.0.0",
-            "--maxv",
-            "2.0.0.0",
-            "-d",
-            "C:\\Windows",
-            "-o",
-            "results.txt",
-        ]);
-        assert_eq!(args.pattern, "*.exe");
-        assert!(args.include_file_version);
-        assert!(args.sort_by_path);
-        assert!(args.quiet);
-        assert_eq!(args.min_version, Some("1.0.0.0".to_string()));
-        assert_eq!(args.max_version, Some("2.0.0.0".to_string()));
-        assert_eq!(args.directory, Some("C:\\Windows".to_string()));
-        assert_eq!(args.output_file, Some("results.txt".to_string()));
+    fn second_pattern_is_usage_error() {
+        let err = CliArgs::try_parse_from(["flist", "*.dll", "*.exe"]).unwrap_err();
+        assert_eq!(err.exit_code(), 2);
+    }
+
+    #[test]
+    fn invalid_version_argument_is_usage_error() {
+        for value in ["abc", "", "1.0-beta", "1.2.3.4.5"] {
+            let err = CliArgs::try_parse_from(["flist", "--min-version", value]).unwrap_err();
+            assert_eq!(err.exit_code(), 2, "value {value:?}");
+        }
     }
 }

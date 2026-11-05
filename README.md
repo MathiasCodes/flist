@@ -49,23 +49,23 @@ flist
 flist "*.dll"
 
 # List DLL files with version information
-flist "*.dll" --include-file-version
+flist "*.dll" --file-version
 
 # Short form
-flist "*.dll" -i
+flist "*.dll" -f
 ```
 
 ### Version Filtering
 
 ```bash
 # Filter by minimum version
-flist "*.dll" --minv 10.0.0.0
+flist "*.dll" --min-version 10.0
 
 # Filter by maximum version
-flist "*.dll" --maxv 11.0.0.0
+flist "*.dll" --max-version 11.0.0.0
 
-# Filter by version range
-flist "*.dll" --minv 10.0.0.0 --maxv 11.0.0.0
+# Filter by version range and show the versions
+flist "*.dll" -f --min-version 10.0 --max-version 11.0
 ```
 
 ### Advanced Usage
@@ -75,33 +75,68 @@ flist "*.dll" --minv 10.0.0.0 --maxv 11.0.0.0
 flist "*.exe" -d C:\Windows\System32
 
 # Sort output by file path
-flist "*.dll" --sort-path
+flist "*.dll" --sort path
+flist "*.dll" -s
 
-# Quiet mode (only show results, no headers)
-flist "*.dll" -q
+# Show versions, newest first
+flist "*.dll" -f --sort version --reverse
+flist "*.dll" -fvr
 
-# Save output to file
-flist "*.dll" -i -o output.txt
+# Save output to file (in addition to the console)
+flist "*.dll" -f -o output.txt
+
+# Skip inaccessible directories without warnings
+flist "*.dll" --ignore-inaccessible
 
 # Combine multiple options
-flist "*.dll" -i -s --minv 10.0.0.0 --maxv 10.0.30000.0 -d C:\Windows\System32 -o results.txt
+flist "*.dll" -f -s --min-version 10.0 --max-version 10.0.30000.0 -d C:\Windows\System32 -o results.txt
 ```
 
 ## Command-Line Options
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `<PATTERN>` | | Search pattern (default: `*`) - supports wildcards |
-| `--include-file-version` | `-i` | Include file version information in output |
-| `--sort-path` | `-s` | Sort output alphabetically by file path |
-| `--minv <VERSION>` | | Omit files with version lower than specified |
-| `--maxv <VERSION>` | | Omit files with version higher than specified |
-| `--directory <PATH>` | `-d` | Directory to search (default: current directory) |
-| `--output <FILE>` | `-o` | Write output to specified file |
-| `--quiet` | `-q` | Quiet mode - suppress header and footer text |
+| `<PATTERN>` | | Search pattern for file names (default: `*`); wildcards `*` and `?`, case-insensitive |
+| `--file-version` | `-f` | Include the file version in the output |
+| `--sort <KEY>` | | Sort the output by `path` (case-insensitive) or `version` (files without version last) |
+| | `-s` | Short form of `--sort path` |
+| | `-v` | Short form of `--sort version` |
+| `--reverse` | `-r` | Reverse the sort order (requires a sort option) |
+| `--min-version <VERSION>` | | Omit files whose version is lower than `<VERSION>` |
+| `--max-version <VERSION>` | | Omit files whose version is higher than `<VERSION>` |
+| `--dir <DIR>` | `-d` | Directory to search (default: current directory) |
+| `--output <FILE>` | `-o` | Additionally write the output to `<FILE>` (created or overwritten) |
+| `--ignore-inaccessible` | | Skip inaccessible directories and files silently |
 | `--help` | `-h` | Print help information |
+| `--version` | `-V` | Print the program version |
 
-**Note:** When `--minv` or `--maxv` is specified, `--include-file-version` is automatically enabled.
+Values may be given as `--dir C:\Tools` or `--dir=C:\Tools`; short flags may be combined (`-fvr`).
+If several sort options are given, the last one wins.
+
+The version filter works independently of `--file-version`, which only controls whether the version column is shown.
+Version bounds are inclusive; missing parts count as `0` (`--max-version 1.2` keeps `1.2.0.0`).
+Files without a comparable version are omitted while a version filter is active.
+
+## Output
+
+One line per file, terminated by CRLF.
+With `--file-version` the version is left-aligned in a column of 16 characters, followed by the full path:
+
+```text
+1.1.30.01       C:\Tools\AutoHotkey\BasicTextExpansion.exe
+14.08           C:\Tools\Autoruns\autoruns.exe
+                C:\Tools\Cheatbox\cheatbox.exe
+```
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Runtime error (e.g. directory not found, output file not writable), or inaccessible entries were skipped with a warning |
+| `2` | Usage error (e.g. unknown option, invalid version argument) |
+
+See [SPECIFICATION.md](SPECIFICATION.md) for the complete behaviour.
 
 ## Building from Source
 
@@ -154,14 +189,10 @@ cargo build --release --target x86_64-unknown-linux-gnu
 
 ## Version Format
 
-File versions follow the format: `major.minor.build.private`
+The file version is the `FileVersion` string from the version resource, shown exactly as stored in the file (e.g. `14.08` or `10.0.26100.1 (WinBuild.160101.0800)`).
 
-Example: `10.0.26100.7019`
-
-- **Major**: Major version number
-- **Minor**: Minor version number  
-- **Build**: Build number
-- **Private**: Private part number
+For filtering, the version is interpreted as `major.minor.build.private`.
+Each part uses its leading digits; the rest is ignored (`1.0.0-beta` compares as `1.0.0.0`).
 
 ## License
 

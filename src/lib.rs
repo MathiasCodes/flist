@@ -5,7 +5,7 @@
 //!
 //! # Features
 //!
-//! - Recursive file search with pattern matching
+//! - Recursive file search with case-insensitive wildcard matching
 //! - Extract and display file version information from PE files (.exe, .dll)
 //! - Filter files by version constraints (min/max)
 //! - Sort output by file path
@@ -16,10 +16,10 @@
 //!
 //! ```no_run
 //! use std::path::Path;
-//! use flist::file_lister::enumerate_files;
+//! use flist::file_lister::{enumerate_files, WildcardPattern};
 //!
-//! let files = enumerate_files(Path::new("."), "*.rs").unwrap();
-//! println!("Found {} files", files.len());
+//! let result = enumerate_files(Path::new("."), &WildcardPattern::new("*.rs")).unwrap();
+//! println!("Found {} files", result.items.len());
 //! ```
 
 pub mod cli;

@@ -1,190 +1,107 @@
 //! Output formatting for console and file output.
-//!
-//! This module provides functions for displaying file listing results to the
-//! console and writing them to output files.
 
 use crate::file_lister::FileInfo;
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::io::{self, Write};
 
-/// Prints results to the console.
+/// Width of the version column, including the separating spaces.
+const VERSION_COLUMN_WIDTH: usize = 16;
+
+/// Line terminator of every output line.
+const LINE_ENDING: &str = "\r\n";
+
+/// Formats one output line without the line terminator.
 ///
-/// Displays file information with optional version numbers. In non-quiet mode,
-/// also shows a summary of the number of files found.
-///
-/// # Arguments
-///
-/// * `files` - Slice of file information to display
-/// * `include_version` - Whether to display version information
-/// * `quiet` - Whether to suppress summary messages
+/// With `include_version` the version is left-aligned in a column of 16 characters,
+/// followed by the full path; a version of 16 or more characters is followed by a single space.
 ///
 /// # Examples
 ///
 /// ```
 /// use std::path::PathBuf;
 /// use flist::file_lister::FileInfo;
-/// use flist::output::print_results;
+/// use flist::output::format_line;
 ///
-/// let files = vec![
-///     FileInfo { path: PathBuf::from("test.dll"), version: None },
-/// ];
-/// print_results(&files, false, true);
+/// let file = FileInfo { path: PathBuf::from("C:\\a.dll"), version: Some("1.0".to_string()) };
+/// assert_eq!(format_line(&file, true), "1.0             C:\\a.dll");
+/// assert_eq!(format_line(&file, false), "C:\\a.dll");
 /// ```
-pub fn print_results(files: &[FileInfo], include_version: bool, quiet: bool) {
-    if !quiet {
-        println!("Found {} files.", files.len());
-        println!();
+pub fn format_line(file: &FileInfo, include_version: bool) -> String {
+    let path = file.path.display();
+    if !include_version {
+        return path.to_string();
     }
-
-    for file_info in files {
-        if include_version {
-            if let Some(version) = file_info.version {
-                println!("{:<15} {}", version, file_info.path.display());
-            } else {
-                println!("{:<15} {}", "", file_info.path.display());
-            }
-        } else {
-            println!("{}", file_info.path.display());
-        }
-    }
-
-    if !quiet {
-        println!();
-        println!("Found {} files.", files.len());
+    let version = file.version.as_deref().unwrap_or("");
+    if version.chars().count() >= VERSION_COLUMN_WIDTH {
+        format!("{version} {path}")
+    } else {
+        format!("{version:<VERSION_COLUMN_WIDTH$}{path}")
     }
 }
 
-/// Writes results to a file.
-///
-/// Creates or overwrites the specified file with the file listing results.
-/// Each line contains the file path and optionally the version information.
-///
-/// # Arguments
-///
-/// * `files` - Slice of file information to write
-/// * `output_path` - Path to the output file
-/// * `include_version` - Whether to include version information
-///
-/// # Returns
-///
-/// `Ok(())` on success, or an error if the file cannot be created or written.
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::path::{Path, PathBuf};
-/// use flist::file_lister::FileInfo;
-/// use flist::output::write_to_file;
-///
-/// let files = vec![
-///     FileInfo { path: PathBuf::from("test.dll"), version: None },
-/// ];
-/// write_to_file(&files, Path::new("output.txt"), false).unwrap();
-/// ```
-pub fn write_to_file(
+/// Writes all files as CRLF-terminated lines to `writer`.
+pub fn write_lines(
+    writer: &mut impl Write,
     files: &[FileInfo],
-    output_path: &Path,
     include_version: bool,
-) -> Result<(), anyhow::Error> {
-    let file = File::create(output_path)?;
-    let mut writer = BufWriter::new(file);
-
-    for file_info in files {
-        if include_version {
-            if let Some(version) = file_info.version {
-                writeln!(writer, "{:<15} {}", version, file_info.path.display())?;
-            } else {
-                writeln!(writer, "{:<15} {}", "", file_info.path.display())?;
-            }
-        } else {
-            writeln!(writer, "{}", file_info.path.display())?;
-        }
+) -> io::Result<()> {
+    for file in files {
+        write!(
+            writer,
+            "{}{LINE_ENDING}",
+            format_line(file, include_version)
+        )?;
     }
-
-    writer.flush()?;
-    Ok(())
+    writer.flush()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::file_version::FileVersion;
-    use std::fs;
     use std::path::PathBuf;
 
-    #[test]
-    fn test_write_to_file_without_version() {
-        let files = vec![
-            FileInfo {
-                path: PathBuf::from("file1.txt"),
-                version: None,
-            },
-            FileInfo {
-                path: PathBuf::from("file2.txt"),
-                version: None,
-            },
-        ];
-
-        let temp_file = std::env::temp_dir().join("flist_test_output.txt");
-        let result = write_to_file(&files, &temp_file, false);
-        assert!(result.is_ok());
-
-        let content = fs::read_to_string(&temp_file).unwrap();
-        assert!(content.contains("file1.txt"));
-        assert!(content.contains("file2.txt"));
-
-        fs::remove_file(&temp_file).unwrap();
+    fn file(path: &str, version: Option<&str>) -> FileInfo {
+        FileInfo {
+            path: PathBuf::from(path),
+            version: version.map(str::to_string),
+        }
     }
 
     #[test]
-    fn test_write_to_file_with_version() {
-        let files = vec![
-            FileInfo {
-                path: PathBuf::from("file1.dll"),
-                version: Some("1.0.0.0".parse::<FileVersion>().unwrap()),
-            },
-            FileInfo {
-                path: PathBuf::from("file2.dll"),
-                version: Some("2.0.0.0".parse::<FileVersion>().unwrap()),
-            },
-        ];
-
-        let temp_file = std::env::temp_dir().join("flist_test_output_version.txt");
-        let result = write_to_file(&files, &temp_file, true);
-        assert!(result.is_ok());
-
-        let content = fs::read_to_string(&temp_file).unwrap();
-        assert!(content.contains("1.0.0.0"));
-        assert!(content.contains("2.0.0.0"));
-        assert!(content.contains("file1.dll"));
-        assert!(content.contains("file2.dll"));
-
-        fs::remove_file(&temp_file).unwrap();
+    fn version_column_is_padded_to_sixteen_characters() {
+        assert_eq!(
+            format_line(&file("C:\\a.exe", Some("14.08")), true),
+            "14.08           C:\\a.exe"
+        );
     }
 
     #[test]
-    fn test_write_to_file_with_mixed_versions() {
-        let files = vec![
-            FileInfo {
-                path: PathBuf::from("file1.dll"),
-                version: Some("1.0.0.0".parse::<FileVersion>().unwrap()),
-            },
-            FileInfo {
-                path: PathBuf::from("file2.dll"),
-                version: None, // No version
-            },
-        ];
+    fn missing_version_leaves_column_blank() {
+        assert_eq!(
+            format_line(&file("C:\\a.exe", None), true),
+            format!("{}C:\\a.exe", " ".repeat(16))
+        );
+    }
 
-        let temp_file = std::env::temp_dir().join("flist_test_output_mixed.txt");
-        let result = write_to_file(&files, &temp_file, true);
-        assert!(result.is_ok());
+    #[test]
+    fn long_version_is_followed_by_single_space() {
+        assert_eq!(
+            format_line(&file("C:\\a.exe", Some("10.0.26100.7019x")), true),
+            "10.0.26100.7019x C:\\a.exe"
+        );
+    }
 
-        let content = fs::read_to_string(&temp_file).unwrap();
-        assert!(content.contains("1.0.0.0"));
-        assert!(content.contains("file1.dll"));
-        assert!(content.contains("file2.dll"));
+    #[test]
+    fn path_only_without_version() {
+        assert_eq!(
+            format_line(&file("C:\\a.exe", Some("1.0")), false),
+            "C:\\a.exe"
+        );
+    }
 
-        fs::remove_file(&temp_file).unwrap();
+    #[test]
+    fn write_lines_uses_crlf() {
+        let mut buffer = Vec::new();
+        write_lines(&mut buffer, &[file("a", None), file("b", None)], false).unwrap();
+        assert_eq!(String::from_utf8(buffer).unwrap(), "a\r\nb\r\n");
     }
 }

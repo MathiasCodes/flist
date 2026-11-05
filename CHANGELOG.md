@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Aligned with [SPECIFICATION.md](SPECIFICATION.md).
+
+### Changed
+- **Breaking:** GNU-style options `-f/--file-version`, `--sort <KEY>` with `-s`, `--min-version`, `--max-version`, `-d/--dir`; removed `--ifs`, `--sp`, `--minv`, `--maxv`, `--directory` and `-q/--quiet`
+- Output contains only the result lines, without header and footer
+- Lines end with CRLF on all platforms; output is UTF-8
+- Without sorting, files of a directory are listed before its subdirectories
+- The file version is the `FileVersion` string as stored in the file instead of the numeric version
+- The version filter no longer enables the version column
+- Version comparison treats missing parts as `0` and uses the leading digits of each part
+- Search pattern uses Windows wildcards (`*`, `?`) and is case-insensitive
+- Sorting by path is case-insensitive
+
+### Added
+- Sorting by file version with `--sort version` or `-v`
+- `-r/--reverse` to reverse the sort order
+- Warnings for skipped inaccessible entries and `--ignore-inaccessible`
+- Exit codes: 1 for runtime errors and skipped entries, 2 for usage errors
+
+### Fixed
+- A missing start directory is reported as an error instead of producing an empty list
+- `--max-version 1.2` no longer omits files with version `1.2.0.0`
+- Empty version arguments are rejected
+
+### Removed
+- Unused dependencies `glob` and `winapi`
+
 ## [0.9.0] - 2025-11-28
 
 ### Added
@@ -26,8 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Binary size optimization (388 KB release binary)
 
 ### Changed
-- Migrated from .NET 6.0 to Rust 2021 edition
-- Improved file enumeration performance (23% faster than .NET version)
 - Enhanced error messages with helpful context and expected formats
 - Better cross-platform support for PE file analysis
 
@@ -38,7 +63,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Uses pelite for PE file parsing
 - Uses anyhow for ergonomic error handling
 - Optimized release profile with LTO and size optimization
-
-## [0.x.x] - Previous .NET versions
-- See original .NET repository for history
-

@@ -1,148 +1,92 @@
-//! File version representation and parsing.
+//! File version representation, parsing and comparison.
 //!
-//! This module provides the [`FileVersion`] struct for representing and comparing
-//! file versions in the format `major.minor.build.private`.
+//! A version has up to four numeric parts: `major.minor.build.private`.
+//! Missing parts count as `0`, so `14.08` equals `14.8.0.0`.
 
-use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
 
-/// Represents a file version with up to 4 parts: major.minor.build.private.
-///
-/// Each part is optional and represented as `Option<u32>`. This allows for partial
-/// versions like "1.0" or "2.3.4".
+/// A comparable file version with four numeric parts.
 ///
 /// # Examples
 ///
 /// ```
-/// use std::str::FromStr;
 /// use flist::file_version::FileVersion;
 ///
-/// let version = FileVersion::from_str("1.2.3.4").unwrap();
-/// assert_eq!(version.major, Some(1));
-/// assert_eq!(version.minor, Some(2));
-/// assert_eq!(version.build, Some(3));
-/// assert_eq!(version.private, Some(4));
+/// let version: FileVersion = "1.2".parse().unwrap();
+/// assert_eq!(version, "1.2.0.0".parse().unwrap());
+/// assert_eq!(version.to_string(), "1.2.0.0");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FileVersion {
-    pub major: Option<u32>,
-    pub minor: Option<u32>,
-    pub build: Option<u32>,
-    pub private: Option<u32>,
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FileVersion([u32; 4]);
 
 impl FileVersion {
-    /// Creates a new `FileVersion` with the specified parts.
+    /// Creates a version from its four parts.
+    pub fn new(major: u32, minor: u32, build: u32, private: u32) -> Self {
+        Self([major, minor, build, private])
+    }
+
+    /// Interprets a version string read from a file leniently.
     ///
-    /// # Arguments
-    ///
-    /// * `major` - The major version number
-    /// * `minor` - The minor version number
-    /// * `build` - The build number
-    /// * `private` - The private/revision number
+    /// For each part only the leading digits are used; the rest of the part is ignored.
+    /// Parts beyond the fourth are ignored.
+    /// Returns `None` if the first part has no leading digit.
+    /// If a later part has no leading digit, that part and all following parts count as `0`.
     ///
     /// # Examples
     ///
     /// ```
     /// use flist::file_version::FileVersion;
     ///
-    /// let version = FileVersion::new(Some(1), Some(2), Some(3), Some(4));
-    /// assert_eq!(version.to_string(), "1.2.3.4");
+    /// assert_eq!(FileVersion::parse_lenient("1.0.0-beta"), Some(FileVersion::new(1, 0, 0, 0)));
+    /// assert_eq!(FileVersion::parse_lenient("6.0.1 (build 42)"), Some(FileVersion::new(6, 0, 1, 0)));
+    /// assert_eq!(FileVersion::parse_lenient("beta"), None);
     /// ```
-    pub fn new(
-        major: Option<u32>,
-        minor: Option<u32>,
-        build: Option<u32>,
-        private: Option<u32>,
-    ) -> Self {
-        Self {
-            major,
-            minor,
-            build,
-            private,
+    pub fn parse_lenient(s: &str) -> Option<Self> {
+        let mut parts = [0u32; 4];
+        for (index, part) in s.trim().split('.').take(4).enumerate() {
+            let digits: String = part.chars().take_while(char::is_ascii_digit).collect();
+            if digits.is_empty() {
+                if index == 0 {
+                    return None;
+                }
+                break;
+            }
+            parts[index] = digits.parse().unwrap_or(u32::MAX);
         }
+        Some(Self(parts))
     }
 }
 
+/// Parses a version argument strictly: one to four purely numeric parts separated by dots.
 impl FromStr for FileVersion {
-    type Err = anyhow::Error;
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let invalid = || {
+            format!(
+                "invalid version '{s}', expected one to four numbers separated by dots (e.g. 1.2.3.4)"
+            )
+        };
         let parts: Vec<&str> = s.split('.').collect();
-
-        let major = if !parts.is_empty() && !parts[0].is_empty() {
-            Some(parts[0].parse::<u32>()?)
-        } else {
-            None
-        };
-
-        let minor = if parts.len() > 1 && !parts[1].is_empty() {
-            Some(parts[1].parse::<u32>()?)
-        } else {
-            None
-        };
-
-        let build = if parts.len() > 2 && !parts[2].is_empty() {
-            Some(parts[2].parse::<u32>()?)
-        } else {
-            None
-        };
-
-        let private = if parts.len() > 3 && !parts[3].is_empty() {
-            Some(parts[3].parse::<u32>()?)
-        } else {
-            None
-        };
-
-        Ok(FileVersion {
-            major,
-            minor,
-            build,
-            private,
-        })
-    }
-}
-
-impl PartialOrd for FileVersion {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for FileVersion {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // Compare major
-        match self.major.cmp(&other.major) {
-            Ordering::Equal => {}
-            ord => return ord,
+        if parts.len() > 4 {
+            return Err(invalid());
         }
-
-        // Compare minor
-        match self.minor.cmp(&other.minor) {
-            Ordering::Equal => {}
-            ord => return ord,
+        let mut result = [0u32; 4];
+        for (index, part) in parts.iter().enumerate() {
+            if part.is_empty() || !part.chars().all(|c| c.is_ascii_digit()) {
+                return Err(invalid());
+            }
+            result[index] = part.parse().map_err(|_| invalid())?;
         }
-
-        // Compare build
-        match self.build.cmp(&other.build) {
-            Ordering::Equal => {}
-            ord => return ord,
-        }
-
-        // Compare private
-        self.private.cmp(&other.private)
+        Ok(Self(result))
     }
 }
 
 impl fmt::Display for FileVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let major = self.major.map_or(0, |v| v);
-        let minor = self.minor.map_or(0, |v| v);
-        let build = self.build.map_or(0, |v| v);
-        let private = self.private.map_or(0, |v| v);
-
-        write!(f, "{}.{}.{}.{}", major, minor, build, private)
+        let [major, minor, build, private] = self.0;
+        write!(f, "{major}.{minor}.{build}.{private}")
     }
 }
 
@@ -151,87 +95,91 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_full_version() {
-        let version = FileVersion::from_str("1.2.3.4").unwrap();
-        assert_eq!(version.major, Some(1));
-        assert_eq!(version.minor, Some(2));
-        assert_eq!(version.build, Some(3));
-        assert_eq!(version.private, Some(4));
+    fn parse_full_version() {
+        assert_eq!("1.2.3.4".parse(), Ok(FileVersion::new(1, 2, 3, 4)));
     }
 
     #[test]
-    fn test_parse_partial_version() {
-        let version = FileVersion::from_str("1.2").unwrap();
-        assert_eq!(version.major, Some(1));
-        assert_eq!(version.minor, Some(2));
-        assert_eq!(version.build, None);
-        assert_eq!(version.private, None);
+    fn parse_partial_version_fills_with_zero() {
+        assert_eq!("1.2".parse(), Ok(FileVersion::new(1, 2, 0, 0)));
+        assert_eq!("14.08".parse(), Ok(FileVersion::new(14, 8, 0, 0)));
     }
 
     #[test]
-    fn test_version_comparison() {
-        let v1 = FileVersion::from_str("1.0.0.0").unwrap();
-        let v2 = FileVersion::from_str("1.0.0.1").unwrap();
-        let v3 = FileVersion::from_str("1.0.1.0").unwrap();
-        let v4 = FileVersion::from_str("1.1.0.0").unwrap();
-        let v5 = FileVersion::from_str("2.0.0.0").unwrap();
-
-        assert!(v1 < v2);
-        assert!(v2 < v3);
-        assert!(v3 < v4);
-        assert!(v4 < v5);
+    fn parse_rejects_invalid_arguments() {
+        for value in [
+            "",
+            "abc",
+            "1.",
+            ".1",
+            "1..2",
+            "1.0-beta",
+            "1.2.3.4.5",
+            " 1",
+            "-1",
+        ] {
+            assert!(value.parse::<FileVersion>().is_err(), "value {value:?}");
+        }
     }
 
     #[test]
-    fn test_version_equality() {
-        let v1 = FileVersion::from_str("1.2.3.4").unwrap();
-        let v2 = FileVersion::from_str("1.2.3.4").unwrap();
-        assert_eq!(v1, v2);
+    fn partial_version_equals_full_version() {
+        let partial: FileVersion = "1.2".parse().unwrap();
+        let full: FileVersion = "1.2.0.0".parse().unwrap();
+        assert_eq!(partial, full);
     }
 
     #[test]
-    fn test_partial_version_equality() {
-        let v1 = FileVersion::from_str("1.2").unwrap();
-        let v2 = FileVersion::new(Some(1), Some(2), None, None);
-        assert_eq!(v1, v2);
+    fn compare_part_by_part_numerically() {
+        let versions: Vec<FileVersion> = [
+            "1.0.0.0", "1.0.0.1", "1.0.1.0", "1.1.0.0", "2.0.0.0", "10.0.0.0",
+        ]
+        .iter()
+        .map(|v| v.parse().unwrap())
+        .collect();
+        assert!(versions.windows(2).all(|pair| pair[0] < pair[1]));
     }
 
     #[test]
-    fn test_display_format() {
-        let version = FileVersion::from_str("1.2.3.4").unwrap();
-        assert_eq!(format!("{}", version), "1.2.3.4");
-
-        let partial = FileVersion::from_str("1.2").unwrap();
-        assert_eq!(format!("{}", partial), "1.2.0.0");
+    fn lenient_uses_leading_digits() {
+        assert_eq!(
+            FileVersion::parse_lenient("1.1.30.01"),
+            Some(FileVersion::new(1, 1, 30, 1))
+        );
+        assert_eq!(
+            FileVersion::parse_lenient("10.0.26100.1 (WinBuild.160101.0800)"),
+            Some(FileVersion::new(10, 0, 26100, 1))
+        );
+        assert_eq!(
+            FileVersion::parse_lenient("1.0.0-beta"),
+            Some(FileVersion::new(1, 0, 0, 0))
+        );
     }
 
     #[test]
-    fn test_invalid_version() {
-        let result = FileVersion::from_str("abc");
-        assert!(result.is_err());
+    fn lenient_treats_later_non_numeric_parts_as_zero() {
+        assert_eq!(
+            FileVersion::parse_lenient("2.x.5.6"),
+            Some(FileVersion::new(2, 0, 0, 0))
+        );
     }
 
     #[test]
-    fn test_empty_string() {
-        let result = FileVersion::from_str("");
-        assert!(result.is_ok());
-        let version = result.unwrap();
-        assert_eq!(version.major, None);
+    fn lenient_ignores_parts_beyond_fourth() {
+        assert_eq!(
+            FileVersion::parse_lenient("1.2.3.4.5"),
+            Some(FileVersion::new(1, 2, 3, 4))
+        );
     }
 
     #[test]
-    fn test_greater_than_operator() {
-        let v1 = FileVersion::from_str("2.0.0.0").unwrap();
-        let v2 = FileVersion::from_str("1.0.0.0").unwrap();
-        assert!(v1 > v2);
+    fn lenient_returns_none_without_leading_digit() {
+        assert_eq!(FileVersion::parse_lenient(""), None);
+        assert_eq!(FileVersion::parse_lenient("v1.0"), None);
     }
 
     #[test]
-    fn test_less_than_or_equal() {
-        let v1 = FileVersion::from_str("1.0.0.0").unwrap();
-        let v2 = FileVersion::from_str("1.0.0.0").unwrap();
-        let v3 = FileVersion::from_str("2.0.0.0").unwrap();
-        assert!(v1 <= v2);
-        assert!(v1 <= v3);
+    fn display_shows_four_parts() {
+        assert_eq!(FileVersion::new(1, 2, 0, 0).to_string(), "1.2.0.0");
     }
 }
