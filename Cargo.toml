@@ -1,6 +1,6 @@
 [package]
 name = "flist"
-version = "0.9.0"
+version = "1.0.0"
 authors = ["Mathias Koch"]
 edition = "2024"
 description = "Search and list files with file version information"
