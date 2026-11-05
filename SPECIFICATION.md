@@ -24,6 +24,7 @@ flist [OPTIONS] [PATTERN]
 | `-r`, `--reverse` | Reverse the sort order. Requires a sort option. |
 | `--min-version <VERSION>` | Omit files whose file version is lower than `<VERSION>`. |
 | `--max-version <VERSION>` | Omit files whose file version is higher than `<VERSION>`. |
+| `--version-source <SOURCE>` | Take the version from `SOURCE`: `file` (default), `product`, `file-fixed` or `product-fixed`. See [Version source](#version-source). |
 | `-d`, `--dir <DIR>` | Start the search in `<DIR>`. Default: the current directory. |
 | `-o`, `--output <FILE>` | Additionally write the output to `<FILE>`. The file is created or overwritten. |
 | `--ignore-inaccessible` | Skip inaccessible directories and files silently. |
@@ -77,9 +78,26 @@ flist [OPTIONS] [PATTERN]
 
 ## File version
 
-- The file version is the `FileVersion` string from the Windows version resource of the file.
-- It is shown exactly as stored in the resource, e.g. `1.0.0.0`, `14.08` or `0.1.0`.
-- Files without a version resource have no file version.
+- The file version is read from the version resource of Windows executables and libraries (PE files such as `.exe` and `.dll`).
+- The PE file format is parsed directly, so the result is the same on every operating system; on Linux and macOS, flist reads the versions of Windows files as well.
+- Other files, including native Linux (ELF) and macOS (Mach-O) executables and libraries, have no file version.
+- PE files without a version resource, or without the value selected by `--version-source`, have no file version.
+
+### Version source
+
+`--version-source` selects which value of the version resource is used.
+The selected value is shown in the version column and used for filtering and sorting.
+
+| `SOURCE` | Value | Example |
+|---|---|---|
+| `file` (default) | `FileVersion` string, as shown by Windows Explorer | `10.0.26100.1 (WinBuild.160101.0800)` |
+| `product` | `ProductVersion` string; for .NET and many other builds the release version | `8.0.11+9cb3b725e3ad` |
+| `file-fixed` | Numeric file version from the fixed part of the version resource | `10.0.26100.7019` |
+| `product-fixed` | Numeric product version from the fixed part of the version resource | `8.0.11.0` |
+
+- The string values are shown exactly as stored, e.g. `1.0.0.0`, `14.08` or `0.1.0`.
+  Empty strings count as no version.
+- The fixed values are always shown as four numbers, `major.minor.build.private`.
 
 ### Version comparison
 
@@ -109,7 +127,7 @@ The arguments of `--min-version` and `--max-version` must consist of one to four
 - With `--file-version`: the file version, left-aligned and padded with spaces to a width of 16 characters, followed by the full path.
   A version of 16 or more characters is followed by a single space.
   For files without a version the version column consists of spaces only.
-- Lines end with CRLF.
+- Lines end with the platform's line ending: CRLF on Windows, LF on Linux and macOS.
 - The output is encoded as UTF-8 without a byte order mark, on stdout and in the output file.
   When stdout is a Windows console, the text is shown correctly regardless of the console code page.
 - With `--output` the same lines are written to stdout and to the output file.
